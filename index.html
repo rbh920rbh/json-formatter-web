@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>JSON 格式化编辑器</title>
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <main class="app">
+    <h1>JSON 格式化编辑器</h1>
+
+    <section class="controls">
+      <button id="formatBtn" class="primary">格式化</button>
+      <button id="forceUnescapeFormatBtn">去除转义并格式化</button>
+      <button id="compressBtn">压缩</button>
+      <button id="validateBtn">仅校验</button>
+      <button id="expandBtn">全部展开</button>
+      <button id="collapseBtn">全部折叠</button>
+      <button id="clearBtn">清空</button>
+      <button id="historyBtn">历史</button>
+      <button id="maximizeBtn">最大化显示</button>
+    </section>
+
+    <section class="panes">
+      <div class="pane">
+        <h2>JSON 编辑器</h2>
+        <div id="inputEditor" class="code-view"></div>
+      </div>
+    </section>
+  </main>
+  <aside id="historyPanel" class="history-panel" aria-label="JSON 历史记录">
+    <div class="history-panel-header">
+      <h3>最近 20 条历史</h3>
+      <button id="closeHistoryBtn" class="history-close-btn" aria-label="关闭历史">关闭</button>
+    </div>
+    <div id="historyList" class="history-list"></div>
+  </aside>
+  <div id="toastContainer" class="toast-container" aria-live="polite" aria-atomic="true"></div>
+
+  <script src="./vendor/vs/loader.js"></script>
+  <script src="./app.js"></script>
+</body>
+</html>
