@@ -18,6 +18,9 @@ const historyTabBtn = document.getElementById("historyTabBtn");
 const favoritesTabBtn = document.getElementById("favoritesTabBtn");
 const recordSearchInput = document.getElementById("recordSearchInput");
 const clearRecordSearchBtn = document.getElementById("clearRecordSearchBtn");
+const importRecordsBtn = document.getElementById("importRecordsBtn");
+const exportRecordsBtn = document.getElementById("exportRecordsBtn");
+const importRecordsInput = document.getElementById("importRecordsInput");
 const closeHistoryBtn = document.getElementById("closeHistoryBtn");
 
 let inputEditor = null;
@@ -116,21 +119,7 @@ function loadHistoryRecords() {
     }
 
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    const normalized = parsed
-      .filter((item) => item && typeof item.timestamp === "number" && typeof item.content === "string")
-      .map((item) => ({
-        id: typeof item.id === "string" && item.id ? item.id : `${item.timestamp}-${Math.random().toString(36).slice(2, 8)}`,
-        timestamp: item.timestamp,
-        content: item.content
-      }))
-      .sort((a, b) => b.timestamp - a.timestamp)
-      .slice(0, MAX_HISTORY_RECORDS);
-
-    return normalized;
+    return normalizeHistoryRecords(parsed);
   } catch (_err) {
     return [];
   }
@@ -148,18 +137,7 @@ function loadFavoriteRecords() {
     }
 
     const parsed = JSON.parse(raw);
-    if (!Array.isArray(parsed)) {
-      return [];
-    }
-
-    return parsed
-      .filter((item) => item && typeof item.timestamp === "number" && typeof item.content === "string")
-      .map((item) => ({
-        id: typeof item.id === "string" && item.id ? item.id : `${item.timestamp}-${Math.random().toString(36).slice(2, 8)}`,
-        timestamp: item.timestamp,
-        content: item.content,
-        name: typeof item.name === "string" ? item.name : ""
-      }));
+    return normalizeFavoriteRecords(parsed);
   } catch (_err) {
     return [];
   }
@@ -167,6 +145,123 @@ function loadFavoriteRecords() {
 
 function saveFavoriteRecords() {
   window.localStorage.setItem(FAVORITES_STORAGE_KEY, JSON.stringify(favoriteRecords));
+}
+
+function normalizeHistoryRecords(records) {
+  if (!Array.isArray(records)) {
+    return [];
+  }
+
+  return records
+    .filter((item) => item && typeof item.timestamp === "number" && typeof item.content === "string")
+    .map((item) => ({
+      id: typeof item.id === "string" && item.id ? item.id : `${item.timestamp}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: item.timestamp,
+      content: item.content
+    }))
+    .sort((a, b) => b.timestamp - a.timestamp)
+    .slice(0, MAX_HISTORY_RECORDS);
+}
+
+function normalizeFavoriteRecords(records) {
+  if (!Array.isArray(records)) {
+    return [];
+  }
+
+  return records
+    .filter((item) => item && typeof item.timestamp === "number" && typeof item.content === "string")
+    .map((item) => ({
+      id: typeof item.id === "string" && item.id ? item.id : `${item.timestamp}-${Math.random().toString(36).slice(2, 8)}`,
+      timestamp: item.timestamp,
+      content: item.content,
+      name: typeof item.name === "string" ? item.name : ""
+    }));
+}
+
+function mergeHistoryRecords(existingRecords, importedRecords) {
+  const merged = [];
+  const seen = new Set();
+  for (const item of [...importedRecords, ...existingRecords]) {
+    if (seen.has(item.content)) {
+      continue;
+    }
+    seen.add(item.content);
+    merged.push(item);
+  }
+  return normalizeHistoryRecords(merged);
+}
+
+function mergeFavoriteRecords(existingRecords, importedRecords) {
+  const merged = [...existingRecords];
+  for (const item of importedRecords) {
+    const index = merged.findIndex((record) => record.content === item.content);
+    if (index < 0) {
+      merged.push(item);
+      continue;
+    }
+    if (!merged[index].name && item.name) {
+      merged[index].name = item.name;
+    }
+  }
+  return normalizeFavoriteRecords(merged);
+}
+
+function exportRecordsData() {
+  const payload = {
+    version: 1,
+    exportedAt: new Date().toISOString(),
+    historyRecords,
+    favoriteRecords
+  };
+
+  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  const stamp = new Date().toISOString().replace(/[:.]/g, "-");
+  link.href = url;
+  link.download = `json-formatter-records-${stamp}.json`;
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+  URL.revokeObjectURL(url);
+  setStatus("历史与收藏已导出。", "success");
+}
+
+function importRecordsDataFromObject(data, mode = "replace") {
+  if (!data || typeof data !== "object") {
+    throw new Error("导入文件格式无效。");
+  }
+
+  const sourceHistory = Array.isArray(data.historyRecords) ? data.historyRecords : data.history;
+  const sourceFavorites = Array.isArray(data.favoriteRecords) ? data.favoriteRecords : data.favorites;
+  if (!Array.isArray(sourceHistory) && !Array.isArray(sourceFavorites)) {
+    throw new Error("导入失败：未找到历史或收藏数据。");
+  }
+
+  const importedHistory = normalizeHistoryRecords(sourceHistory);
+  const importedFavorites = normalizeFavoriteRecords(sourceFavorites);
+  if (mode === "merge") {
+    historyRecords = mergeHistoryRecords(historyRecords, importedHistory);
+    favoriteRecords = mergeFavoriteRecords(favoriteRecords, importedFavorites);
+  } else {
+    historyRecords = importedHistory;
+    favoriteRecords = importedFavorites;
+  }
+  saveHistoryRecords();
+  saveFavoriteRecords();
+  renderHistoryPanel();
+}
+
+async function importRecordsFromFile(file, mode = "replace") {
+  const text = await file.text();
+  let parsed;
+  try {
+    parsed = JSON.parse(text);
+  } catch (_err) {
+    throw new Error("导入失败：文件不是有效 JSON。");
+  }
+
+  importRecordsDataFromObject(parsed, mode);
 }
 
 function isRecordFavorited(record) {
@@ -1474,6 +1569,37 @@ maximizeBtn.addEventListener("click", () => {
 if (closeHistoryBtn) {
   closeHistoryBtn.addEventListener("click", () => {
     toggleHistoryPanel(false);
+  });
+}
+if (exportRecordsBtn) {
+  exportRecordsBtn.addEventListener("click", () => {
+    exportRecordsData();
+  });
+}
+if (importRecordsBtn && importRecordsInput) {
+  importRecordsBtn.addEventListener("click", () => {
+    importRecordsInput.value = "";
+    importRecordsInput.click();
+  });
+
+  importRecordsInput.addEventListener("change", async () => {
+    const file = importRecordsInput.files && importRecordsInput.files[0];
+    if (!file) {
+      return;
+    }
+
+    try {
+      const mergeMode = window.confirm(
+        "请选择导入方式：\n点击“确定”= 合并导入（保留当前数据并去重）\n点击“取消”= 覆盖导入（用文件内容替换当前数据）"
+      );
+      await importRecordsFromFile(file, mergeMode ? "merge" : "replace");
+      setStatus(mergeMode ? "合并导入成功。" : "覆盖导入成功。", "success");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : "导入失败。";
+      setStatus(msg, "error");
+    } finally {
+      importRecordsInput.value = "";
+    }
   });
 }
 if (historyTabBtn) {

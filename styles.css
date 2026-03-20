@@ -208,6 +208,36 @@ button.primary:hover {
   font-size: 16px;
 }
 
+.history-header-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.history-mini-group {
+  display: inline-flex;
+}
+
+.history-mini-btn {
+  padding: 4px 9px;
+  font-size: 12px;
+  border-radius: 0;
+}
+
+.history-mini-btn:first-child {
+  border-top-left-radius: 8px;
+  border-bottom-left-radius: 8px;
+}
+
+.history-mini-btn:last-child {
+  border-top-right-radius: 8px;
+  border-bottom-right-radius: 8px;
+}
+
+.history-mini-btn + .history-mini-btn {
+  margin-left: -1px;
+}
+
 .history-tabs {
   display: flex;
   gap: 8px;

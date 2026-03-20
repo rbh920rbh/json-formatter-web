@@ -43,8 +43,15 @@
   <aside id="historyPanel" class="history-panel" aria-label="JSON 历史记录">
     <div class="history-panel-header">
       <h3>记录中心</h3>
-      <button id="closeHistoryBtn" class="history-close-btn" aria-label="关闭历史">关闭</button>
+      <div class="history-header-actions">
+        <div class="history-mini-group" aria-label="记录导入导出">
+          <button id="importRecordsBtn" class="history-mini-btn" type="button">导入</button>
+          <button id="exportRecordsBtn" class="history-mini-btn" type="button">导出</button>
+        </div>
+        <button id="closeHistoryBtn" class="history-close-btn" aria-label="关闭历史">关闭</button>
+      </div>
     </div>
+    <input id="importRecordsInput" type="file" accept="application/json,.json" hidden />
     <div class="history-tabs">
       <button id="historyTabBtn" class="history-tab active" type="button">历史</button>
       <button id="favoritesTabBtn" class="history-tab" type="button">收藏</button>
