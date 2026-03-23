@@ -496,6 +496,10 @@ button.primary:hover {
   cursor: grabbing !important;
 }
 
+.history-list.dragging .history-item {
+  will-change: transform;
+}
+
 .history-json {
   border: 1px solid var(--border);
   border-radius: 8px;

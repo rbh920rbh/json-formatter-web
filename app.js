@@ -529,6 +529,37 @@ function positionDragGhost(clientX, clientY) {
   dragGhostEl.style.top = `${clientY + 12}px`;
 }
 
+function animateRecordListShift(mutate) {
+  if (!recordList) {
+    mutate();
+    return;
+  }
+
+  const animatedItems = Array.from(recordList.querySelectorAll(".history-item"))
+    .filter((el) => !el.classList.contains("drag-source") && !el.classList.contains("drag-placeholder"));
+  const firstRects = new Map(animatedItems.map((el) => [el, el.getBoundingClientRect()]));
+
+  mutate();
+
+  for (const el of animatedItems) {
+    const first = firstRects.get(el);
+    if (!first) {
+      continue;
+    }
+    const last = el.getBoundingClientRect();
+    const deltaY = first.top - last.top;
+    if (Math.abs(deltaY) < 1) {
+      continue;
+    }
+    el.style.transition = "none";
+    el.style.transform = `translateY(${deltaY}px)`;
+    window.requestAnimationFrame(() => {
+      el.style.transition = "transform 180ms ease";
+      el.style.transform = "";
+    });
+  }
+}
+
 function updateFavoritePlaceholderPosition(clientX, clientY) {
   if (!recordList || !dragPlaceholderEl || !draggingFavoriteItemEl) {
     return;
@@ -542,7 +573,9 @@ function updateFavoritePlaceholderPosition(clientX, clientY) {
     targetItem.classList.contains("drag-source")
   ) {
     if (shouldAppendPlaceholderToEndByY(clientY, recordList)) {
-      recordList.appendChild(dragPlaceholderEl);
+      animateRecordListShift(() => {
+        recordList.appendChild(dragPlaceholderEl);
+      });
     }
     return;
   }
@@ -553,7 +586,9 @@ function updateFavoritePlaceholderPosition(clientX, clientY) {
   if (nextSibling === dragPlaceholderEl) {
     return;
   }
-  recordList.insertBefore(dragPlaceholderEl, nextSibling);
+  animateRecordListShift(() => {
+    recordList.insertBefore(dragPlaceholderEl, nextSibling);
+  });
 }
 
 function commitFavoritePointerDrag() {
