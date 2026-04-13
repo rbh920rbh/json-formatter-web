@@ -241,6 +241,35 @@ function mergeFavoriteRecords(existingRecords, importedRecords) {
   return normalizeFavoriteRecords(merged);
 }
 
+function downloadBlobFile(blob, filename) {
+  if (!blob || !filename) {
+    throw new Error("下载参数无效。");
+  }
+
+  const nav = window.navigator;
+  if (nav && typeof nav.msSaveOrOpenBlob === "function") {
+    nav.msSaveOrOpenBlob(blob, filename);
+    return;
+  }
+
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement("a");
+  link.href = url;
+  link.download = filename;
+  link.rel = "noopener";
+  link.style.display = "none";
+  document.body.appendChild(link);
+  link.click();
+
+  // Delay revoke to avoid edge-case navigation/download race in some browsers.
+  window.setTimeout(() => {
+    if (link.parentElement) {
+      link.parentElement.removeChild(link);
+    }
+    URL.revokeObjectURL(url);
+  }, 1000);
+}
+
 function exportRecordsData() {
   syncRecordsFromStorage();
   const payload = {
@@ -251,15 +280,8 @@ function exportRecordsData() {
   };
 
   const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
   const stamp = new Date().toISOString().replace(/[:.]/g, "-");
-  link.href = url;
-  link.download = `json-formatter-records-${stamp}.json`;
-  document.body.appendChild(link);
-  link.click();
-  document.body.removeChild(link);
-  URL.revokeObjectURL(url);
+  downloadBlobFile(blob, `json-formatter-records-${stamp}.json`);
   setStatus("历史与收藏已导出。", "success");
 }
 
@@ -431,15 +453,18 @@ function loadHistoryRecordToEditor(record) {
     return;
   }
 
+  syncRecordsFromStorage();
+  const latestRecord = historyRecords.find((item) => item.id === record.id) || record;
+
   try {
-    const parsed = JSON.parse(record.content);
+    const parsed = JSON.parse(latestRecord.content);
     setInputValue(JSON.stringify(parsed, null, 2));
     if (inputEditor) {
       inputEditor.trigger("keyboard", "editor.unfoldAll", null);
     }
     setStatus("已加载历史记录并完成格式化。", "success");
   } catch (_err) {
-    setInputValue(record.content);
+    setInputValue(latestRecord.content);
     setStatus("已加载历史记录。", "success");
   }
 }
@@ -989,9 +1014,8 @@ function addHistoryRecord(contentText) {
   const newRecord = createHistoryRecord(contentText);
   lastInsertedHistoryId = newRecord.id;
   historyRecords.unshift(newRecord);
-  historyRecords = historyRecords
-    .sort((a, b) => b.timestamp - a.timestamp)
-    .slice(0, MAX_HISTORY_RECORDS);
+  const latestFromStorage = loadHistoryRecords();
+  historyRecords = mergeHistoryRecords(latestFromStorage, historyRecords);
   saveHistoryRecords();
   renderHistoryPanel();
 }
