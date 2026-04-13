@@ -65,9 +65,39 @@ function setStatus(message, type = "", options = {}) {
     return;
   }
 
+  const actionText = options && typeof options.actionText === "string" ? options.actionText.trim() : "";
+  const onAction = options && typeof options.onAction === "function" ? options.onAction : null;
+  const duration = typeof options?.duration === "number" && options.duration > 0
+    ? options.duration
+    : (actionText && onAction ? 4200 : 2600);
+
   const toast = document.createElement("div");
   toast.className = `toast ${type}`.trim();
-  toast.textContent = message;
+  const messageEl = document.createElement("span");
+  messageEl.textContent = message;
+  toast.appendChild(messageEl);
+
+  if (actionText && onAction) {
+    const actionBtn = document.createElement("button");
+    actionBtn.type = "button";
+    actionBtn.className = "toast-action-btn";
+    actionBtn.textContent = actionText;
+    actionBtn.addEventListener("click", (event) => {
+      event.stopPropagation();
+      try {
+        onAction();
+      } finally {
+        toast.classList.remove("show");
+        window.setTimeout(() => {
+          if (toast.parentElement) {
+            toast.parentElement.removeChild(toast);
+          }
+        }, 180);
+      }
+    });
+    toast.appendChild(actionBtn);
+  }
+
   toastContainer.appendChild(toast);
 
   window.requestAnimationFrame(() => {
@@ -81,7 +111,7 @@ function setStatus(message, type = "", options = {}) {
         toast.parentElement.removeChild(toast);
       }
     }, 180);
-  }, 2600);
+  }, duration);
 }
 
 function clearControlsHideTimer() {
@@ -141,6 +171,11 @@ function loadFavoriteRecords() {
   } catch (_err) {
     return [];
   }
+}
+
+function syncRecordsFromStorage() {
+  historyRecords = loadHistoryRecords();
+  favoriteRecords = loadFavoriteRecords();
 }
 
 function saveFavoriteRecords() {
@@ -207,6 +242,7 @@ function mergeFavoriteRecords(existingRecords, importedRecords) {
 }
 
 function exportRecordsData() {
+  syncRecordsFromStorage();
   const payload = {
     version: 1,
     exportedAt: new Date().toISOString(),
@@ -241,6 +277,7 @@ function importRecordsDataFromObject(data, mode = "replace") {
   const importedHistory = normalizeHistoryRecords(sourceHistory);
   const importedFavorites = normalizeFavoriteRecords(sourceFavorites);
   if (mode === "merge") {
+    syncRecordsFromStorage();
     historyRecords = mergeHistoryRecords(historyRecords, importedHistory);
     favoriteRecords = mergeFavoriteRecords(favoriteRecords, importedFavorites);
   } else {
@@ -269,6 +306,7 @@ function isRecordFavorited(record) {
 }
 
 function toggleFavoriteRecord(record) {
+  syncRecordsFromStorage();
   const index = favoriteRecords.findIndex((item) => item.content === record.content);
   if (index >= 0) {
     favoriteRecords.splice(index, 1);
@@ -284,21 +322,30 @@ function toggleFavoriteRecord(record) {
   setStatus("已加入收藏。", "success");
 }
 
-function ensureFavoriteContent(contentText) {
-  const exists = favoriteRecords.some((item) => item.content === contentText);
+function ensureFavoriteContent(contentText, options = {}) {
+  syncRecordsFromStorage();
+  const silentStatus = Boolean(options && options.silentStatus);
+  const existingRecord = favoriteRecords.find((item) => item.content === contentText);
+  const exists = Boolean(existingRecord);
   if (exists) {
-    setStatus("该内容已在收藏中。", "success");
-    return false;
+    if (!silentStatus) {
+      setStatus("该内容已在收藏中。", "success");
+    }
+    return { added: false, record: existingRecord || null };
   }
 
-  favoriteRecords.unshift({ ...createHistoryRecord(contentText), name: "" });
+  const newRecord = { ...createHistoryRecord(contentText), name: "" };
+  favoriteRecords.unshift(newRecord);
   saveFavoriteRecords();
   renderHistoryPanel();
-  setStatus("收藏成功。", "success");
-  return true;
+  if (!silentStatus) {
+    setStatus("收藏成功。", "success");
+  }
+  return { added: true, record: newRecord };
 }
 
 function updateFavoriteName(recordId, nextName) {
+  syncRecordsFromStorage();
   const index = favoriteRecords.findIndex((item) => item.id === recordId);
   if (index < 0) {
     return;
@@ -309,7 +356,26 @@ function updateFavoriteName(recordId, nextName) {
   renderHistoryPanel();
 }
 
+function promptFavoriteName(recordId) {
+  if (!recordId) {
+    return;
+  }
+  syncRecordsFromStorage();
+  const target = favoriteRecords.find((item) => item.id === recordId);
+  if (!target) {
+    setStatus("未找到对应收藏，可能已被删除。", "error");
+    return;
+  }
+  const input = window.prompt("请输入收藏名称：", target.name || "");
+  if (input === null) {
+    return;
+  }
+  updateFavoriteName(recordId, input.trim());
+  setStatus("收藏名称已更新。", "success");
+}
+
 function moveFavoriteRecordToIndex(dragRecordId, toIndex) {
+  syncRecordsFromStorage();
   if (!dragRecordId || toIndex < 0) {
     return false;
   }
@@ -331,6 +397,7 @@ function moveFavoriteRecordToIndex(dragRecordId, toIndex) {
 }
 
 function deleteRecordById(recordId, source, itemEl) {
+  syncRecordsFromStorage();
   const target = source === "favorites" ? favoriteRecords : historyRecords;
   const index = target.findIndex((item) => item.id === recordId);
   if (index < 0) {
@@ -342,6 +409,7 @@ function deleteRecordById(recordId, source, itemEl) {
   }
 
   window.setTimeout(() => {
+    syncRecordsFromStorage();
     const listRef = source === "favorites" ? favoriteRecords : historyRecords;
     const latestIndex = listRef.findIndex((item) => item.id === recordId);
     if (latestIndex < 0) {
@@ -909,6 +977,7 @@ function renderHistoryPanel() {
 }
 
 function addHistoryRecord(contentText) {
+  syncRecordsFromStorage();
   if (!contentText) {
     return;
   }
@@ -937,6 +1006,7 @@ function toggleHistoryPanel(forceOpen) {
 }
 
 function openRecordPanel(tab) {
+  syncRecordsFromStorage();
   activeRecordTab = tab === "favorites" ? "favorites" : "history";
   renderHistoryPanel();
   toggleHistoryPanel(true);
@@ -1110,6 +1180,76 @@ function parseEscapedJsonString(parsedValue) {
   return null;
 }
 
+function unescapeJsonLikeText(text) {
+  let output = "";
+  for (let i = 0; i < text.length; i += 1) {
+    const ch = text[i];
+    if (ch !== "\\") {
+      output += ch;
+      continue;
+    }
+
+    if (i + 1 >= text.length) {
+      return null;
+    }
+
+    const next = text[i + 1];
+    if (next === "\"") {
+      output += "\"";
+      i += 1;
+      continue;
+    }
+    if (next === "\\") {
+      output += "\\";
+      i += 1;
+      continue;
+    }
+    if (next === "/") {
+      output += "/";
+      i += 1;
+      continue;
+    }
+    if (next === "b") {
+      output += "\b";
+      i += 1;
+      continue;
+    }
+    if (next === "f") {
+      output += "\f";
+      i += 1;
+      continue;
+    }
+    if (next === "n") {
+      output += "\n";
+      i += 1;
+      continue;
+    }
+    if (next === "r") {
+      output += "\r";
+      i += 1;
+      continue;
+    }
+    if (next === "t") {
+      output += "\t";
+      i += 1;
+      continue;
+    }
+    if (next === "u") {
+      const hex = text.slice(i + 2, i + 6);
+      if (!/^[0-9a-fA-F]{4}$/.test(hex)) {
+        return null;
+      }
+      output += String.fromCharCode(parseInt(hex, 16));
+      i += 5;
+      continue;
+    }
+
+    output += next;
+    i += 1;
+  }
+  return output;
+}
+
 function tryParseRawEscapedJson(raw) {
   const trimmed = raw.trim();
   if (!trimmed) {
@@ -1122,14 +1262,19 @@ function tryParseRawEscapedJson(raw) {
     return null;
   }
 
-  const unescapedQuotes = trimmed.replace(/\\"/g, "\"");
-  try {
-    const parsed = JSON.parse(unescapedQuotes);
-    if (typeof parsed === "object" && parsed !== null) {
-      return parsed;
+  const candidates = [trimmed.replace(/\\"/g, "\""), unescapeJsonLikeText(trimmed)];
+  for (const candidate of candidates) {
+    if (!candidate) {
+      continue;
     }
-  } catch (_err) {
-    return null;
+    try {
+      const parsed = JSON.parse(candidate);
+      if (typeof parsed === "object" && parsed !== null) {
+        return parsed;
+      }
+    } catch (_err) {
+      // Continue trying next candidate.
+    }
   }
 
   return null;
@@ -1558,7 +1703,17 @@ function favoriteFromEditor() {
   try {
     const result = parseInputDetailed();
     const normalized = JSON.stringify(result.parsed, null, 2);
-    ensureFavoriteContent(normalized);
+    const favoriteResult = ensureFavoriteContent(normalized, { silentStatus: true });
+    if (!favoriteResult.added || !favoriteResult.record) {
+      setStatus("该内容已在收藏中。", "success");
+      return;
+    }
+    setStatus("收藏成功。", "success", {
+      actionText: "设置名称",
+      onAction: () => {
+        promptFavoriteName(favoriteResult.record.id);
+      }
+    });
   } catch (err) {
     const msg = err instanceof Error ? err.message : "收藏失败";
     setStatus(msg, "error");
@@ -1639,12 +1794,14 @@ if (importRecordsBtn && importRecordsInput) {
 }
 if (historyTabBtn) {
   historyTabBtn.addEventListener("click", () => {
+    syncRecordsFromStorage();
     activeRecordTab = "history";
     renderHistoryPanel();
   });
 }
 if (favoritesTabBtn) {
   favoritesTabBtn.addEventListener("click", () => {
+    syncRecordsFromStorage();
     activeRecordTab = "favorites";
     renderHistoryPanel();
   });
@@ -1732,10 +1889,20 @@ document.addEventListener("mousedown", (event) => {
   toggleHistoryPanel(false);
 });
 
+window.addEventListener("storage", (event) => {
+  if (event.storageArea !== window.localStorage) {
+    return;
+  }
+  if (event.key !== HISTORY_STORAGE_KEY && event.key !== FAVORITES_STORAGE_KEY) {
+    return;
+  }
+  syncRecordsFromStorage();
+  renderHistoryPanel();
+});
+
 initEditors()
   .then(() => {
-    historyRecords = loadHistoryRecords();
-    favoriteRecords = loadFavoriteRecords();
+    syncRecordsFromStorage();
     renderHistoryPanel();
     setMaximizeMode(loadMaximizeModePreference());
     setStatus("准备就绪。", "success", { silent: true });

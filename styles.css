@@ -155,6 +155,11 @@ button.primary:hover {
   opacity: 0;
   transform: translateY(-6px);
   transition: opacity 0.16s ease, transform 0.16s ease;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  pointer-events: auto;
 }
 
 .toast.show {
@@ -170,6 +175,20 @@ button.primary:hover {
 .toast.error {
   border-color: #fecaca;
   background: #fef2f2;
+}
+
+.toast-action-btn {
+  padding: 4px 8px;
+  border-radius: 6px;
+  font-size: 12px;
+  white-space: nowrap;
+  border-color: #93c5fd;
+  color: #1d4ed8;
+  background: #eff6ff;
+}
+
+.toast-action-btn:hover {
+  background: #dbeafe;
 }
 
 .history-panel {
