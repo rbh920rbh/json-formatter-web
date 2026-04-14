@@ -210,8 +210,45 @@ button.primary:hover {
   flex-direction: column;
 }
 
+.history-panel.resizing {
+  transition: none;
+}
+
 .history-panel.open {
   transform: translateX(0);
+}
+
+.history-panel-resize-handle {
+  position: absolute;
+  top: 0;
+  left: -4px;
+  width: 8px;
+  height: 100%;
+  cursor: ew-resize;
+  background: transparent;
+}
+
+.history-panel-resize-handle::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 0;
+  width: 2px;
+  height: 100%;
+  background: rgba(148, 163, 184, 0.35);
+  opacity: 0;
+  transition: opacity 0.16s ease;
+}
+
+.history-panel:hover .history-panel-resize-handle::after,
+.history-panel.resizing .history-panel-resize-handle::after {
+  opacity: 1;
+}
+
+body.history-panel-resizing,
+body.history-panel-resizing * {
+  cursor: ew-resize !important;
+  user-select: none !important;
 }
 
 .history-panel-header {

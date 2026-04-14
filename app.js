@@ -22,6 +22,7 @@ const importRecordsBtn = document.getElementById("importRecordsBtn");
 const exportRecordsBtn = document.getElementById("exportRecordsBtn");
 const importRecordsInput = document.getElementById("importRecordsInput");
 const closeHistoryBtn = document.getElementById("closeHistoryBtn");
+const historyPanelResizeHandle = document.getElementById("historyPanelResizeHandle");
 
 let inputEditor = null;
 let inputErrorDecorations = [];
@@ -33,7 +34,10 @@ const MAXIMIZE_STORAGE_KEY = "jsonFormatter.maximizeMode";
 const EDITOR_CONTENT_STORAGE_KEY = "jsonFormatter.editorContent";
 const HISTORY_STORAGE_KEY = "jsonFormatter.historyRecords";
 const FAVORITES_STORAGE_KEY = "jsonFormatter.favoriteRecords";
+const HISTORY_PANEL_WIDTH_STORAGE_KEY = "jsonFormatter.historyPanelWidth";
 const MAX_HISTORY_RECORDS = 20;
+const MIN_HISTORY_PANEL_WIDTH = 320;
+const DEFAULT_HISTORY_PANEL_WIDTH = 460;
 let contentSaveTimer = null;
 let historyRecords = [];
 let favoriteRecords = [];
@@ -50,6 +54,8 @@ let draggingFavoriteItemEl = null;
 let dragMoveListener = null;
 let dragUpListener = null;
 let suppressNextRecordClick = false;
+let historyResizeMoveListener = null;
+let historyResizeUpListener = null;
 
 function createHistoryRecord(content) {
   return {
@@ -128,6 +134,109 @@ function clearContentSaveTimer() {
   }
   window.clearTimeout(contentSaveTimer);
   contentSaveTimer = null;
+}
+
+function getHistoryPanelMaxWidth() {
+  const viewportWidth = window.innerWidth || 1200;
+  return Math.max(MIN_HISTORY_PANEL_WIDTH, Math.floor(viewportWidth * 0.95));
+}
+
+function clampHistoryPanelWidth(width) {
+  if (typeof width !== "number" || Number.isNaN(width)) {
+    return null;
+  }
+  return Math.min(Math.max(Math.round(width), MIN_HISTORY_PANEL_WIDTH), getHistoryPanelMaxWidth());
+}
+
+function applyHistoryPanelWidth(width, persist = true) {
+  if (!historyPanel) {
+    return;
+  }
+  const normalized = clampHistoryPanelWidth(width);
+  if (!normalized) {
+    return;
+  }
+  historyPanel.style.width = `${normalized}px`;
+  if (persist) {
+    window.localStorage.setItem(HISTORY_PANEL_WIDTH_STORAGE_KEY, String(normalized));
+  }
+}
+
+function loadHistoryPanelWidthPreference() {
+  const raw = window.localStorage.getItem(HISTORY_PANEL_WIDTH_STORAGE_KEY);
+  if (!raw) {
+    return null;
+  }
+  const parsed = Number(raw);
+  return clampHistoryPanelWidth(parsed);
+}
+
+function cleanupHistoryPanelResize() {
+  document.body.classList.remove("history-panel-resizing");
+  if (historyPanel) {
+    historyPanel.classList.remove("resizing");
+  }
+  if (historyResizeMoveListener) {
+    document.removeEventListener("mousemove", historyResizeMoveListener);
+    historyResizeMoveListener = null;
+  }
+  if (historyResizeUpListener) {
+    document.removeEventListener("mouseup", historyResizeUpListener);
+    historyResizeUpListener = null;
+  }
+}
+
+function initHistoryPanelResizable() {
+  const preferredWidth = loadHistoryPanelWidthPreference();
+  if (preferredWidth) {
+    applyHistoryPanelWidth(preferredWidth, false);
+  } else {
+    applyHistoryPanelWidth(DEFAULT_HISTORY_PANEL_WIDTH, false);
+  }
+
+  if (!historyPanelResizeHandle || !historyPanel) {
+    return;
+  }
+
+  historyPanelResizeHandle.addEventListener("dblclick", (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    applyHistoryPanelWidth(DEFAULT_HISTORY_PANEL_WIDTH);
+  });
+
+  historyPanelResizeHandle.addEventListener("mousedown", (event) => {
+    if (typeof event.button === "number" && event.button !== 0) {
+      return;
+    }
+    event.preventDefault();
+    event.stopPropagation();
+
+    const panelRect = historyPanel.getBoundingClientRect();
+    const startX = event.clientX;
+    const startWidth = panelRect.width;
+    cleanupHistoryPanelResize();
+    historyPanel.classList.add("resizing");
+    document.body.classList.add("history-panel-resizing");
+
+    historyResizeMoveListener = (moveEvent) => {
+      const nextWidth = startWidth + (startX - moveEvent.clientX);
+      applyHistoryPanelWidth(nextWidth);
+    };
+    historyResizeUpListener = () => {
+      cleanupHistoryPanelResize();
+    };
+    document.addEventListener("mousemove", historyResizeMoveListener);
+    document.addEventListener("mouseup", historyResizeUpListener);
+  });
+
+  window.addEventListener("resize", () => {
+    const currentWidth = historyPanel.getBoundingClientRect().width;
+    const clamped = clampHistoryPanelWidth(currentWidth);
+    if (!clamped || Math.abs(currentWidth - clamped) < 1) {
+      return;
+    }
+    applyHistoryPanelWidth(clamped);
+  });
 }
 
 function saveEditorContent(value) {
@@ -1923,6 +2032,8 @@ window.addEventListener("storage", (event) => {
   syncRecordsFromStorage();
   renderHistoryPanel();
 });
+
+initHistoryPanelResizable();
 
 initEditors()
   .then(() => {
